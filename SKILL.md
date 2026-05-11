@@ -1,22 +1,26 @@
 ---
 name: huashu-md-html
-description: 花叔的「md/html双向流水线」skill，三个能力一站式：(1) 用Microsoft markitdown把任意文件（PDF/DOCX/PPTX/XLSX/HTML/图片/音频/YouTube/EPub/ZIP）转成干净的md；(2) 用Pandoc + 4套精挑模板把md加工成出色的html（文章/报告/阅读模式/交互探索），继承huashu-design的反AI slop审美；(3) 用html-to-markdown + trafilatura把html或URL无损转回md。落地花叔的「md生产，html消费」方法论。触发词：md转html、html转md、pdf转md、docx转md、pptx转md、xlsx转md、文件转md、URL转md、文档转md、转markdown、做html、生成html、网页转md、import文档、导入md、导出html、md to html、html to md、any to md、markitdown、pandoc。即使用户只是说「这个PDF变md」「这篇md做成网页」「这个网页存下来」也应触发。
+description: 花叔的「md/html/docx 多向流水线」skill，四个能力一站式：(1) 用Microsoft markitdown把任意文件（PDF/DOCX/PPTX/XLSX/HTML/图片/音频/YouTube/EPub/ZIP）转成干净的md；(2) 用Pandoc + 4套精挑模板把md加工成出色的html（文章/报告/阅读模式/交互探索），继承huashu-design的反AI slop审美；(3) 用html-to-markdown + trafilatura把html或URL无损转回md；(4) 用python-docx把md加工成出版社级docx（专业排版+自动嵌图+封面目录页眉页脚，专用于纸质书审校/投稿/出版交付）。落地花叔的「md生产，多端消费」方法论。触发词：md转html、html转md、pdf转md、docx转md、pptx转md、xlsx转md、文件转md、URL转md、文档转md、转markdown、做html、生成html、网页转md、import文档、导入md、导出html、md to html、html to md、any to md、md转docx、md to docx、生成docx、做word文档、出版社审校、投稿、纸质书、出版稿、交付docx、book、markitdown、pandoc、python-docx。即使用户只是说「这个PDF变md」「这篇md做成网页」「这个网页存下来」「把这些md做成可投稿的word」「给出版社一份审校稿」也应触发。
 ---
 
 # huashu-md-html
 
-> 你不再需要亲手编辑产物。md是源代码，html是产物。这个skill把两端的最优解打通成一条流水线。
+> 你不再需要亲手编辑产物。md 是源代码，html / docx 是产物。这个 skill 把多端的最优解打通成一条流水线。
 
-## 三个能力（决策树）
+## 四个能力（决策树）
 
 | 用户说什么 | 走哪个能力 | 用什么工具 |
 |------|------|------|
 | 「把这个PDF/DOCX/PPTX/XLSX/EPUB/图片/音频转成md」「import文档」 | **能力1：万物→md** | `scripts/any_to_md.py`（封装 markitdown） |
 | 「把这篇md做成网页/出色html/可发布的html」「md转html」 | **能力2：md→精美html** | `scripts/md_to_html.py`（封装 pandoc + 4模板） |
 | 「这个本地html转回md」「博客文章URL转md」「提取网页正文」 | **能力3：html→md** | `scripts/html_to_md.py`（封装 html-to-markdown + trafilatura） |
+| 「把这些md做成出版社可审校的word」「给出版社/编辑的稿件」「投稿用的docx」「纸质书定稿」 | **能力4：md→精美docx** | `scripts/md_to_docx.py`（封装 python-docx + 专业排版） |
 | 「这个产品页/技术文档URL转md」「带metadata一起拿」 | **能力1：万物→md**（也吃URL） | `scripts/any_to_md.py` |
 
-**决策原则**：能力1产出的md可以直接喂给能力2组成一条龙（如「PDF→精美阅读html」）。能力3用于反向归档（如「把已发布的html博客文章存回项目源」）。
+**决策原则**：
+- 能力1产出的md可以直接喂给能力2组成一条龙（如「PDF→精美阅读html」）
+- 能力3用于反向归档（如「把已发布的html博客文章存回项目源」）
+- **能力4是出版终点**——给人类编辑/出版社审校时用 docx，不要直接给 html 或 md，专业出版生态默认 docx
 
 ### URL 场景的进一步分流（2026-05 实测发现）
 
@@ -175,6 +179,83 @@ python scripts/html_to_md.py input.html -o output.md
 
 完整cookbook见 `references/html-to-md-cookbook.md`。
 
+## 能力4：md → 精美docx（`scripts/md_to_docx.py`）
+
+封装 [python-docx](https://github.com/python-openxml/python-docx) + 出版社级排版预设，专为「给人类编辑/出版社审校/投稿/纸质书定稿」场景设计。
+
+**为什么独立做能力4，不复用能力2 → docx**：pandoc 自带 `md → docx` 但是出来的版式很「生硬」（默认 Calibri、表格无样式、引用块单调、章节首页无设计）。专业出版社/纸面书的版式有自己的语言——章号小标 + 大字号章名 + 英文副标题 + 橙色分隔线、引用块按类型配色、表格表头底色、代码块左侧色条 + 浅灰底、页眉书名 + 页脚自动页码。能力4 把这些预设都内置了，**单文件或一整本书都能一条命令生成**。
+
+### 调用
+
+```bash
+# 单 md 文件 → docx（默认从 md 同级目录找图片）
+python3 scripts/md_to_docx.py article.md
+python3 scripts/md_to_docx.py article.md -o article.docx
+python3 scripts/md_to_docx.py article.md --images-dir ./images
+
+# 多 md 文件合并（普通模式，不加封面/目录）
+python3 scripts/md_to_docx.py ch01.md ch02.md ch03.md -o combined.docx
+
+# 完整书模式（自动加封面 + 目录 + 页眉页脚 + 章节分页）
+python3 scripts/md_to_docx.py ch*.md postscript.md appendix.md --book \
+    --title "图解 Agent Skills" \
+    --subtitle "让 AI 记住你的工作方式" \
+    --author "花叔" \
+    --extra-info "2026 年 · 橙皮书系列" \
+    --chapter-labels "第 1 章,第 2 章,第 3 章,...,后记,附录" \
+    --images-dir ./images \
+    -o book.docx
+
+# 页面规格切换
+python3 scripts/md_to_docx.py article.md --page-size a4   # A4 报告
+python3 scripts/md_to_docx.py book.md --page-size book    # 大 32 开（默认，纸质书规格）
+```
+
+### 内置排版预设
+
+| 元素 | 预设 |
+|------|------|
+| 页面规格 | 大 32 开（176×240 mm）或 A4 |
+| 中文字体 | 思源宋体 CN（回退 Songti SC / PingFang SC） |
+| 英文字体 | Georgia（衬线） |
+| 代码字体 | JetBrains Mono（回退 Menlo） |
+| 章标题（H1） | 24pt 黑色加粗 + 橙色底分隔线 + 上方章号小标 |
+| 节标题（H2） | 17pt 黑色加粗 |
+| 小节（H3） | 13.5pt 橙色加粗 |
+| 行距 | 1.6（中文舒适） |
+| 引用块 | 按 emoji 自动配色：💡 琥珀 / ✅ 青色 / ⚠️ 玫红 / 普通 暖橙 |
+| 代码块 | 浅灰底（F5F5F0）+ 橙色左 16pt 色边 |
+| 表格 | 表头底色 + 浅灰边框 + 居中对齐 |
+| 配图 | 居中嵌入 + 灰色斜体图说 + 最大宽 5.8 英寸 |
+| 页眉 | 右对齐小字号书名（斜体灰色） |
+| 页脚 | 居中自动页码 |
+
+### 图片自动嵌入
+
+支持两种 md 图片语法：
+
+```markdown
+# 内联式：相对路径或绝对路径
+![图说](images/cover.png)
+
+# 引用式（适合长书）：在文末定义路径
+![图 1-1 · 数据曲线][fig-1-1]
+
+[fig-1-1]: images/ch01-fig01.png "数据曲线 · 女娲37天1.8万star"
+```
+
+引用式还支持「按 ref 名约定路径」——如果 ref 是 `fig-1-1` 形态但没有定义对应路径，会自动到 `--images-dir` 找 `ch01-fig01.png`。这个约定让长书（很多章节、几十张图）写起来不用手动维护引用映射。
+
+### 依赖
+
+```bash
+python3 -m pip install python-docx Pillow
+```
+
+脚本启动时自动检测，缺失时给出明确安装命令。
+
+完整 cookbook 见 `references/md-to-docx-cookbook.md`。
+
 ## 排版底线（所有模板共享）
 
 详见 `references/design-tokens.md`，关键参数：
@@ -224,6 +305,20 @@ python scripts/md_to_html.py chapter.md --theme interactive -o ch-interactive.ht
 python scripts/any_to_md.py "https://example.com/page" -o page-markitdown.md
 python scripts/html_to_md.py "https://example.com/page" -o page-trafilatura.md
 # 看哪个对你下游用途更合适
+
+# 场景7：整本橙皮书 md → 出版社审校 docx（能力4）
+python scripts/md_to_docx.py md-v2/ch*.md md-v2/postscript.md md-v2/appendix.md --book \
+    --title "图解 Agent Skills" \
+    --subtitle "让 AI 记住你的工作方式" \
+    --author "花叔" \
+    --images-dir ./images-v2 \
+    -o 图解Agent-Skills_出版社审校版.docx
+# 158 页 · 9 章 + 后记 + 附录 + 57 张配图 · 直接给出版社编辑审
+
+# 场景8：从 PDF 论文/报告 → docx 投稿（能力1 → 能力4）
+python scripts/any_to_md.py paper.pdf -o paper.md
+# 编辑 paper.md 修正格式...
+python scripts/md_to_docx.py paper.md --page-size a4 -o paper.docx
 ```
 
 ## 异常处理
@@ -236,6 +331,8 @@ python scripts/html_to_md.py "https://example.com/page" -o page-trafilatura.md
 | URL请求失败（能力1的YouTube/能力3的URL） | 降级提示：检查网络/VPN/CDN |
 | 转换出空内容 | 报警：可能是扫描PDF或图片密集型文档，提示用 `--llm-describe` |
 | 输出html渲染异常 | 检查pandoc版本（建议≥3.0）、检查模板文件完整性 |
+| python-docx未安装 | 脚本检测后提示`python3 -m pip install python-docx Pillow` |
+| docx 里图片显示不出 | 检查 `--images-dir` 路径，或 ref 名 `fig-N-X` 是否对应 `chNN-figNN.png` 文件命名 |
 
 ## References路由
 
@@ -243,16 +340,18 @@ python scripts/html_to_md.py "https://example.com/page" -o page-trafilatura.md
 |------|-----|
 | markitdown各文件类型最佳实践 | `references/markitdown-cookbook.md` |
 | html→md三种场景下的工具组合 | `references/html-to-md-cookbook.md` |
-| 4套模板的设计哲学+CSS详解 | `references/md-to-html-themes.md` |
+| 4套html模板的设计哲学+CSS详解 | `references/md-to-html-themes.md` |
+| md→docx 完整 cookbook（含书籍模式 / 单文件 / 投稿场景） | `references/md-to-docx-cookbook.md` |
 | 排版底线参数（字体/行高/宽度） | `references/design-tokens.md` |
 | 反AI slop底线（继承自huashu-design） | `references/anti-ai-slop.md` |
 
 ## 核心提醒
 
-- **三个能力是有方向的**：能力1输入端、能力2输出端、能力3反向归档。决策错了会绕远路。
+- **四个能力各有边界**：能力1输入端、能力2 html输出、能力3反向归档、能力4 docx 出版终点。决策错了会绕远路。
 - **md是源**，无论从哪来要回到哪——md是这个流水线的中心。
 - **html产出必反slop**：紫渐变、emoji图标、SVG画人物——一律不要。审美底线见 `references/anti-ai-slop.md`。
 - **URL输入双路径**：结构化页面用能力1（保metadata+层级+链接），博客类用能力3（去导航+只留正文）。判断捷径——内容是「读的」走3，是「查的」走1。
-- **Junior先问，再做**：模板选哪个、图片要不要嵌入、是否要LLM描述图片——一次问清，不要边做边猜。
-- **依赖外部工具**：markitdown（pip）、pandoc（brew）、html-to-markdown（pip）。脚本启动时自检，缺失明确提示。
+- **docx 是给人的，不是给 LLM 的**：给出版社/编辑/投稿系统就用能力4。能力2 的 html 适合自己看、网上分享，不适合编辑改稿。
+- **Junior先问，再做**：模板选哪个、图片要不要嵌入、是否要LLM描述图片、单文件还是书籍模式——一次问清，不要边做边猜。
+- **依赖外部工具**：markitdown（pip）、pandoc（brew）、html-to-markdown（pip）、python-docx（pip）。脚本启动时自检，缺失明确提示。
 - **Python环境陷阱**：macOS 上 `pip` 和 `python3` 可能指向不同 Python 版本（实测踩过：`pip` 是 3.11、`python3` 是 3.14）。安装依赖必须用 `python3 -m pip install ...`，不要直接 `pip install`。

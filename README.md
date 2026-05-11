@@ -2,7 +2,7 @@
 
 # huashu-md-html
 
-> *「md 是源代码，html 是产物。」*
+> *「md 是源代码，html / docx 是产物。」*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Agent-Agnostic](https://img.shields.io/badge/Agent-Agnostic-blueviolet)](https://skills.sh)
@@ -10,11 +10,11 @@
 
 <br>
 
-**md/html 双向流水线 · 三个能力一站式：万物 → md · md → 精美 html · html → md**
+**md/html/docx 多向流水线 · 四个能力一站式：万物 → md · md → 精美 html · html → md · md → 出版社级 docx**
 
 <br>
 
-把任意文件（PDF / DOCX / PPTX / XLSX / EPUB / 图片 / 音频 / YouTube / 网页 URL）转成干净的 markdown，再用 4 套精挑过的主题加工成出色的 html，或反过来把已发布的 html 拉回来归档成 md。
+把任意文件（PDF / DOCX / PPTX / XLSX / EPUB / 图片 / 音频 / YouTube / 网页 URL）转成干净的 markdown，再用 4 套精挑过的主题加工成出色的 html，或反过来把已发布的 html 拉回来归档成 md。需要给出版社/编辑/投稿系统时——一条命令把 md 加工成出版社级 docx，自动嵌图、加封面、做目录、配页眉页脚。
 
 每个能力都封装成一个命令，每套主题都过了反 AI slop 检查清单——没有紫渐变、没有 emoji 当图标、没有 `#0D1117` 深蓝底，配色克制，有出版社品位。
 
@@ -24,7 +24,7 @@ npx skills add alchaincyf/huashu-md-html
 
 跨 agent 通用——Claude Code、Cursor、Codex、OpenClaw、Hermes 都能装。
 
-[看效果](#demo) · [装上就能用](#装上就能用) · [三个能力](#三个能力) · [4 套主题](#4-套主题) · [一条龙工作流](#一条龙工作流)
+[看效果](#demo) · [装上就能用](#装上就能用) · [四个能力](#四个能力) · [4 套 html 主题](#4-套-html-主题) · [一条龙工作流](#一条龙工作流)
 
 </div>
 
@@ -72,21 +72,27 @@ npx skills add alchaincyf/huashu-md-html
 「把这篇 md 做成精美 html，用 article 主题」
 「这个博客 URL 转回 md，去掉导航和侧栏」
 「把这份 PPTX 转成 md，再用 reading 主题做成发布版」
+「把这些章节 md 做成一份出版社可审校的 docx」
+「这份稿子做成投稿用的 word，A4 规格」
 ```
 
 没有按钮、没有面板、没有 GUI。
 
 ---
 
-## 三个能力
+## 四个能力
 
 | 用户说什么 | 能力 | 底层工具 | 入口脚本 |
 |---|---|---|---|
 | 「PDF / DOCX / PPTX / XLSX / EPUB / 图片 / 音频 / YouTube / 网页 URL → md」 | **能力 1：万物 → md** | [microsoft/markitdown](https://github.com/microsoft/markitdown) | `scripts/any_to_md.py` |
 | 「md → 精美 html / 文章 / 报告 / 阅读模式」 | **能力 2：md → 精美 html** | [pandoc](https://pandoc.org/) + 4 套自调主题 | `scripts/md_to_html.py` |
 | 「本地 html 或 URL → md / 归档已发布的博客」 | **能力 3：html → md** | [html-to-markdown](https://github.com/Goldziher/html-to-markdown) + [trafilatura](https://github.com/adbar/trafilatura) | `scripts/html_to_md.py` |
+| 「md → 出版社审校 docx / 投稿稿件 / 纸质书定稿」 | **能力 4：md → 精美 docx** | [python-docx](https://github.com/python-openxml/python-docx) + 出版社级排版预设 | `scripts/md_to_docx.py` |
 
-**决策原则**：能力 1 产出的 md 可以直接喂给能力 2，组成「PDF → 精美阅读 html」一条龙。能力 3 用于反向归档。
+**决策原则**：
+- 能力 1 产出的 md 可以直接喂给能力 2，组成「PDF → 精美阅读 html」一条龙
+- 能力 3 用于反向归档（把已发布的 html 拉回项目源）
+- 能力 4 是**出版终点**——给人类编辑/出版社审校时用 docx，不要直接给 html 或 md，专业出版生态默认 docx
 
 ### URL 输入的两条路径
 
@@ -102,7 +108,7 @@ URL 既能走能力 1（markitdown）也能走能力 3（trafilatura），但产
 
 ---
 
-## 4 套主题
+## 4 套 html 主题
 
 每套都过了反 AI slop 检查清单。自包含单 CSS，HTML 打开即用，不依赖外部 CDN。
 
@@ -143,6 +149,45 @@ URL 既能走能力 1（markitdown）也能走能力 3（trafilatura），但产
 
 ---
 
+## md → 出版社级 docx
+
+为什么单独做能力 4？因为 `pandoc md -o docx` 出来的 docx 默认 Calibri、无表格样式、无封面、章节首页平淡——能给 AI 看，不能给出版社编辑改稿。
+
+能力 4 的脚本内置了出版社版式预设：
+
+```bash
+# 单文件转换
+python3 scripts/md_to_docx.py article.md
+
+# 整本书（自动加封面 + 目录 + 页眉 + 章节分页）
+python3 scripts/md_to_docx.py ch*.md postscript.md appendix.md --book \
+    --title "图解 Agent Skills" \
+    --subtitle "让 AI 记住你的工作方式" \
+    --author "花叔" \
+    --images-dir ./images \
+    -o book.docx
+```
+
+**版式特性**：
+
+| 元素 | 预设 |
+|------|------|
+| 页面 | 大 32 开（176×240mm）或 A4 |
+| 章标题 | 章号小标 + 24pt 大字号 + 橙色底分隔线 + 英文副标题 |
+| 引用块 | 按 emoji 自动配色：💡 琥珀 / ✅ 青色 / ⚠️ 玫红 |
+| 代码块 | 浅灰底 + 橙色左侧色边 + JetBrains Mono |
+| 表格 | 表头底色 + 灰色边框 + 居中对齐 |
+| 配图 | 居中嵌入 + 灰色斜体图说 |
+| 页眉页脚 | 书名右对齐 + 居中自动页码 |
+
+**实战验证**：用这个脚本生成《图解 Agent Skills》158 页出版社审校稿（9 章 + 后记 + 附录 + 57 张配图），一条命令搞定。
+
+完整 cookbook 见 [`references/md-to-docx-cookbook.md`](references/md-to-docx-cookbook.md)。
+
+依赖：`python3 -m pip install python-docx Pillow`
+
+---
+
 ## 一条龙工作流
 
 ```bash
@@ -168,6 +213,16 @@ python3 scripts/md_to_html.py chapter.md --theme interactive -o ch-interactive.h
 # 场景 6：URL 不确定走哪条路 → 两个都跑对比
 python3 scripts/any_to_md.py "https://example.com/page" -o page-markitdown.md
 python3 scripts/html_to_md.py "https://example.com/page" -o page-trafilatura.md
+
+# 场景 7：整本书 md → 出版社审校 docx
+python3 scripts/md_to_docx.py md-v2/ch*.md md-v2/postscript.md md-v2/appendix.md --book \
+    --title "图解 Agent Skills" --author "花叔" --subtitle "让 AI 记住你的工作方式" \
+    --images-dir ./images-v2 -o 出版社审校版.docx
+
+# 场景 8：PDF 论文 → docx 投稿（能力 1 → 能力 4）
+python3 scripts/any_to_md.py paper.pdf -o paper.md
+# 编辑 paper.md 修正格式...
+python3 scripts/md_to_docx.py paper.md --page-size a4 -o paper.docx
 ```
 
 ---
@@ -180,6 +235,7 @@ python3 scripts/html_to_md.py "https://example.com/page" -o page-trafilatura.md
 | `pandoc` | md → html | `brew install pandoc`（macOS）/ [官网下载](https://pandoc.org/installing.html) |
 | `html-to-markdown` | html → md（高速 Rust 引擎）| `python3 -m pip install html-to-markdown` |
 | `trafilatura` | URL 正文提取 | `python3 -m pip install trafilatura` |
+| `python-docx` + `Pillow` | md → 精美 docx | `python3 -m pip install python-docx Pillow` |
 
 脚本启动时会自检，缺失的依赖会明确提示安装命令，不会静默失败。
 
@@ -193,11 +249,12 @@ python3 scripts/html_to_md.py "https://example.com/page" -o page-trafilatura.md
 huashu-md-html/
 ├── SKILL.md                 # Agent 主文档（中文）
 ├── README.md                # 本文件
-├── scripts/                 # 三能力入口
-│   ├── any_to_md.py         # 万物 → md
-│   ├── md_to_html.py        # md → 精美 html
-│   └── html_to_md.py        # html → md
-├── templates/               # 4 套精挑主题 + 公众号专用
+├── scripts/                 # 四能力入口
+│   ├── any_to_md.py         # 能力 1：万物 → md
+│   ├── md_to_html.py        # 能力 2：md → 精美 html
+│   ├── html_to_md.py        # 能力 3：html → md
+│   └── md_to_docx.py        # 能力 4：md → 出版社级 docx
+├── templates/               # 4 套精挑 html 主题 + 公众号专用
 │   ├── article/             # Tufte 风
 │   ├── report/              # 白皮书风
 │   ├── reading/             # Medium 极简
@@ -207,6 +264,7 @@ huashu-md-html/
 │   ├── markitdown-cookbook.md
 │   ├── md-to-html-themes.md
 │   ├── html-to-md-cookbook.md
+│   ├── md-to-docx-cookbook.md     # ⭐ 新增：md → docx 完整指南
 │   ├── design-tokens.md
 │   └── anti-ai-slop.md
 ├── examples/                # 主题预览
