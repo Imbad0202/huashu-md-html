@@ -1,29 +1,32 @@
 ---
 name: huashu-md-html
-description: 花叔的「md/html/docx 多向流水线」skill，四个能力 + 两种模式：(1) 用Microsoft markitdown把任意文件（PDF/DOCX/PPTX/XLSX/HTML/图片/音频/YouTube/EPub/ZIP）转成干净的md；(2) 用Pandoc + 4套精挑模板把md加工成出色的html——**兜底模式**（不耗token，pandoc 一键套版）+ **视觉艺术设计师模式**（AI 读懂内容、推荐 3 个差异化方向、为内容定制视觉表达），继承huashu-design的反AI slop审美；(3) 用html-to-markdown + trafilatura把html或URL无损转回md；(4) 用python-docx把md加工成出版社级docx（专业排版+自动嵌图+封面目录页眉页脚，专用于纸质书审校/投稿/出版交付）。落地花叔的「md生产，多端消费」方法论。触发词：md转html、html转md、pdf转md、docx转md、pptx转md、xlsx转md、文件转md、URL转md、文档转md、转markdown、做html、生成html、网页转md、import文档、导入md、导出html、md to html、html to md、any to md、出版社审校、投稿、纸质书、出版稿、交付docx、book、出色的html、定制html设计、做个好看的网页、设计师模式、几种风格、推荐设计方向、markitdown、pandoc、python-docx。即使用户只是说「这个PDF变md」「这篇md做成网页」「这个网页存下来」「给出版社一份审校稿」「给这个md做个出色的html」「让我看看几种风格」也应触发。**不要在以下场景触发**：(a) 深耕觀察表、深耕訪視、sprout-observation、校本報告、分析報告 等 sprout-observation skill 領地（那是固定格式，由 sprout-observation 用 make-docx 處理）；(b) 一般 HEEACT 工作的「md 轉 docx」「make docx」「出 docx」單一動作（那是 make-docx skill 的 preset 觸發詞，不要搶）。本 skill 只在 (i) 用戶明確要「出版社級 / 紙質書 / 投稿 / book mode」精装 docx、或 (ii) 涉及 html / 多向轉換 / markitdown / pandoc 多能力流水线 時觸發。
+description: 花叔的文档发布流水线 skill，专门负责三类独有任务：(1) 用 Microsoft markitdown 把 PDF/DOCX/PPTX/XLSX/HTML/图片/音频/YouTube/EPub/ZIP 等导入为干净 markdown；(2) 用 Pandoc + 4 套模板把 markdown 加工成精美 HTML，含**兜底模式**（不耗 token，pandoc 一键套版）和**视觉艺术设计师模式**（AI 读懂内容、推荐 3 个差异化方向、为内容定制视觉表达），继承 huashu-design 反 AI slop 审美；(3) 用 html-to-markdown + trafilatura 把 HTML/URL 无损归档为 markdown；(4) **仅当用户明确要求「出版社级 / 纸质书 / 投稿 / book mode / 整本书 / 封面目录页眉页脚」的整书 Word 交付时**，生成出版审校 docx（python-docx 专业排版 + 自动嵌图 + 章节分页）。触发：pdf转md、docx转md、pptx转md、xlsx转md、文件转md、URL转md、转markdown、md转html、html转md、生成html、网页转md、import文档、导入md、导出html、md to html、html to md、any to md、出版社审校、投稿稿、纸质书定稿、book mode、整本书、出色的html、定制html设计、做个好看的网页、设计师模式、几种风格、推荐设计方向、markitdown、pandoc、trafilatura。本 skill 不处理一般 markdown 到 Word/docx 的日常排版需求（请用 make-docx），也不处理任何 HEEACT 评鉴/深耕/访视/观察表场景（请用 sprout-observation）。
 ---
 
 # huashu-md-html
 
 > 你不再需要亲手编辑产物。md 是源代码，html / docx 是产物。这个 skill 把多端的最优解打通成一条流水线。
 
-## 不要搶別人的活（skill routing）
+## 路由前置檢查（命中即退出）
 
-本 skill 跟其他兩個 docx 相關 skill 並存，**接到任務時先確認是不是自己該做的**：
+在跑本 skill 任何腳本前，先做這個檢查——若命中**任一條退出規則**，立刻停手，請使用者改用對應的 skill：
 
-| 用戶說 | 該走 | 不該走 huashu 因為 |
-|---|---|---|
-| 「給訪視觀察表出 docx」「深耕分析報告 docx」「sprout 觀察表」 | **sprout-observation** | sprout 有固定格式（form-landscape / brief-portrait preset）+ PostToolUse hook 自動同步，huashu 介入會破壞契約 |
-| 「md 轉 docx」「make docx」「出 docx」 單純動作、沒講 book/出版社 | **make-docx** | make-docx 有三 preset（report-portrait / form-landscape / brief-portrait）涵蓋 HEEACT 日常 |
-| 「PACUCOA dd-report」「sprout 訪視觀察表」「給主管 review 的 md」 | **make-docx** | make-docx 三 preset 就是為這類設計 |
-| **「整本書 md → 出版社審校 docx」「投稿用的 word」「紙質書定稿」「book mode 帶封面目錄頁眉頁腳」** | **huashu-md-html 能力 4** | 出版社級版面 + book mode + 章節分頁 + 配圖嵌入是 huashu 獨有 |
-| 「PDF 轉 md」「PPTX 轉 md」「YouTube 影片轉 md」「網頁 URL 轉 md」 | **huashu-md-html 能力 1** | markitdown 是 huashu 獨有 |
-| 「md 轉 html」「做個精美 html」「網頁分享版」 | **huashu-md-html 能力 2** | 4 套 pandoc 主題是 huashu 獨有 |
-| 「html 轉 md」「博客 URL 抓回來歸檔」 | **huashu-md-html 能力 3** | trafilatura + html-to-markdown 是 huashu 獨有 |
+**退出規則 1**：任務是一般 markdown → docx/Word 排版，**且使用者沒明說「出版社級 / 紙質書 / 投稿 / book mode / 整本書 / 封面目錄頁眉頁腳」**。→ 改用 make-docx。
 
-**判斷捷徑：用戶有提到 sprout / 深耕 / 訪視 / 校本 / 觀察表 / 分析報告？→ 不是 huashu。用戶只說「md 轉 docx」沒講 book/出版社？→ 不是 huashu，去 make-docx。**
+**退出規則 2**：任務提到深耕 / 訪視 / 觀察表 / 校本報告 / sprout / HEEACT 評鑑流程 / PACUCOA dd-report，或檔名形如 `*_觀察表_*.md` `*_分析報告_*.md`。→ 改用 sprout-observation（觀察表/分析報告場景）或 make-docx（PACUCOA 場景）。
 
-若沒把握，AskUserQuestion 確認用途再動手，不要兩個 skill 都跑造成重複 docx。
+**退出規則 3**：HEEACT 日常工作（不是訪視/深耕的）給主管 review 的 md。→ 改用 make-docx 的 `brief-portrait` preset。
+
+退出規則都不命中，再看下面這張正向 routing 表決定能力 1/2/3/4 哪個：
+
+| 用戶說 | 走哪個能力 |
+|---|---|
+| 「PDF 轉 md」「PPTX 轉 md」「YouTube 影片轉 md」「網頁 URL 轉 md」 | **能力 1**（markitdown） |
+| 「md 轉 html」「做個精美 html」「網頁分享版」「定制設計師模式」 | **能力 2**（pandoc + 4 主題） |
+| 「html 轉 md」「博客 URL 抓回來歸檔」 | **能力 3**（trafilatura + html-to-markdown） |
+| 「整本書 md → 出版社審校 docx」「投稿用 word」「紙質書定稿」「book mode」 | **能力 4**（python-docx 出版社級） |
+
+若任務模糊（譬如「把這份 md 出個 docx」沒講場景），AskUserQuestion 確認：是 (A) book mode 整書，還是 (B) 一般文件給主管 review？如果是 (B) 就交給 make-docx。不要兩個 skill 都跑造成重複 docx。
 
 ## 四个能力（决策树）
 
