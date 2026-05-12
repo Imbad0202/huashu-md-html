@@ -1,11 +1,29 @@
 ---
 name: huashu-md-html
-description: 花叔的「md/html/docx 多向流水线」skill，四个能力 + 两种模式：(1) 用Microsoft markitdown把任意文件（PDF/DOCX/PPTX/XLSX/HTML/图片/音频/YouTube/EPub/ZIP）转成干净的md；(2) 用Pandoc + 4套精挑模板把md加工成出色的html——**兜底模式**（不耗token，pandoc 一键套版）+ **视觉艺术设计师模式**（AI 读懂内容、推荐 3 个差异化方向、为内容定制视觉表达），继承huashu-design的反AI slop审美；(3) 用html-to-markdown + trafilatura把html或URL无损转回md；(4) 用python-docx把md加工成出版社级docx（专业排版+自动嵌图+封面目录页眉页脚，专用于纸质书审校/投稿/出版交付）。落地花叔的「md生产，多端消费」方法论。触发词：md转html、html转md、pdf转md、docx转md、pptx转md、xlsx转md、文件转md、URL转md、文档转md、转markdown、做html、生成html、网页转md、import文档、导入md、导出html、md to html、html to md、any to md、md转docx、md to docx、生成docx、做word文档、出版社审校、投稿、纸质书、出版稿、交付docx、book、出色的html、定制html设计、做个好看的网页、设计师模式、几种风格、推荐设计方向、markitdown、pandoc、python-docx。即使用户只是说「这个PDF变md」「这篇md做成网页」「这个网页存下来」「把这些md做成可投稿的word」「给出版社一份审校稿」「给这个md做个出色的html」「让我看看几种风格」也应触发。
+description: 花叔的「md/html/docx 多向流水线」skill，四个能力 + 两种模式：(1) 用Microsoft markitdown把任意文件（PDF/DOCX/PPTX/XLSX/HTML/图片/音频/YouTube/EPub/ZIP）转成干净的md；(2) 用Pandoc + 4套精挑模板把md加工成出色的html——**兜底模式**（不耗token，pandoc 一键套版）+ **视觉艺术设计师模式**（AI 读懂内容、推荐 3 个差异化方向、为内容定制视觉表达），继承huashu-design的反AI slop审美；(3) 用html-to-markdown + trafilatura把html或URL无损转回md；(4) 用python-docx把md加工成出版社级docx（专业排版+自动嵌图+封面目录页眉页脚，专用于纸质书审校/投稿/出版交付）。落地花叔的「md生产，多端消费」方法论。触发词：md转html、html转md、pdf转md、docx转md、pptx转md、xlsx转md、文件转md、URL转md、文档转md、转markdown、做html、生成html、网页转md、import文档、导入md、导出html、md to html、html to md、any to md、出版社审校、投稿、纸质书、出版稿、交付docx、book、出色的html、定制html设计、做个好看的网页、设计师模式、几种风格、推荐设计方向、markitdown、pandoc、python-docx。即使用户只是说「这个PDF变md」「这篇md做成网页」「这个网页存下来」「给出版社一份审校稿」「给这个md做个出色的html」「让我看看几种风格」也应触发。**不要在以下场景触发**：(a) 深耕觀察表、深耕訪視、sprout-observation、校本報告、分析報告 等 sprout-observation skill 領地（那是固定格式，由 sprout-observation 用 make-docx 處理）；(b) 一般 HEEACT 工作的「md 轉 docx」「make docx」「出 docx」單一動作（那是 make-docx skill 的 preset 觸發詞，不要搶）。本 skill 只在 (i) 用戶明確要「出版社級 / 紙質書 / 投稿 / book mode」精装 docx、或 (ii) 涉及 html / 多向轉換 / markitdown / pandoc 多能力流水线 時觸發。
 ---
 
 # huashu-md-html
 
 > 你不再需要亲手编辑产物。md 是源代码，html / docx 是产物。这个 skill 把多端的最优解打通成一条流水线。
+
+## 不要搶別人的活（skill routing）
+
+本 skill 跟其他兩個 docx 相關 skill 並存，**接到任務時先確認是不是自己該做的**：
+
+| 用戶說 | 該走 | 不該走 huashu 因為 |
+|---|---|---|
+| 「給訪視觀察表出 docx」「深耕分析報告 docx」「sprout 觀察表」 | **sprout-observation** | sprout 有固定格式（form-landscape / brief-portrait preset）+ PostToolUse hook 自動同步，huashu 介入會破壞契約 |
+| 「md 轉 docx」「make docx」「出 docx」 單純動作、沒講 book/出版社 | **make-docx** | make-docx 有三 preset（report-portrait / form-landscape / brief-portrait）涵蓋 HEEACT 日常 |
+| 「PACUCOA dd-report」「sprout 訪視觀察表」「給主管 review 的 md」 | **make-docx** | make-docx 三 preset 就是為這類設計 |
+| **「整本書 md → 出版社審校 docx」「投稿用的 word」「紙質書定稿」「book mode 帶封面目錄頁眉頁腳」** | **huashu-md-html 能力 4** | 出版社級版面 + book mode + 章節分頁 + 配圖嵌入是 huashu 獨有 |
+| 「PDF 轉 md」「PPTX 轉 md」「YouTube 影片轉 md」「網頁 URL 轉 md」 | **huashu-md-html 能力 1** | markitdown 是 huashu 獨有 |
+| 「md 轉 html」「做個精美 html」「網頁分享版」 | **huashu-md-html 能力 2** | 4 套 pandoc 主題是 huashu 獨有 |
+| 「html 轉 md」「博客 URL 抓回來歸檔」 | **huashu-md-html 能力 3** | trafilatura + html-to-markdown 是 huashu 獨有 |
+
+**判斷捷徑：用戶有提到 sprout / 深耕 / 訪視 / 校本 / 觀察表 / 分析報告？→ 不是 huashu。用戶只說「md 轉 docx」沒講 book/出版社？→ 不是 huashu，去 make-docx。**
+
+若沒把握，AskUserQuestion 確認用途再動手，不要兩個 skill 都跑造成重複 docx。
 
 ## 四个能力（决策树）
 
