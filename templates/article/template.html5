@@ -11,10 +11,9 @@ $if(keywords)$  <meta name="keywords" content="$for(keywords)$$keywords$$sep$, $
 $if(description-meta)$  <meta name="description" content="$description-meta$" />$endif$
   <title>$if(title-prefix)$$title-prefix$ – $endif$$pagetitle$</title>
 
-  <!-- Web fonts: Newsreader (display+body serif) + IBM Plex Sans (UI) + JetBrains Mono (code) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+  <!-- Fonts: system fallback chain in theme.css (Source Han Serif / Iowan Old Style / Georgia,
+       PingFang / system sans, SF Mono / Menlo). Web fonts are intentionally NOT loaded so the
+       output is fully self-contained and doesn't phone home to Google when published. -->
 
 $for(css)$  <link rel="stylesheet" href="$css$" />
 $endfor$

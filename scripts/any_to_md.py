@@ -35,13 +35,50 @@ def ensure_markitdown():
         sys.exit(2)
 
 
+ALLOWED_URL_SCHEMES = ("http", "https")
+BLOCKED_SCHEMES_HINT = (
+    "Only http://, https://, or local file paths are accepted. "
+    "file:, data:, ftp:, gopher:, javascript:, mailto:, etc. are rejected because "
+    "this script is designed to run inside an AI agent harness where an "
+    "untrusted source argument could otherwise read arbitrary local files "
+    "and leak their contents into the generated markdown."
+)
+
+
+def validate_source(source: str) -> None:
+    """Reject non-http(s) URI schemes; plain paths pass through.
+
+    When an LLM agent auto-invokes this script, a `file://` or `data:`
+    argument injected via prompt or filename gives the attacker an arbitrary
+    local-file read whose content lands in the output markdown (and back into
+    the agent's context). Block at the entrypoint before markitdown sees it.
+
+    Uses urlsplit() so single-slash forms (`file:/etc/passwd`), leading
+    whitespace, and case-variants (`FILE://`, ` DATA:`) are also caught.
+    """
+    from urllib.parse import urlsplit
+
+    stripped = source.strip()
+    parts = urlsplit(stripped)
+    scheme = parts.scheme.lower()
+
+    if not scheme:
+        return  # plain local path — markitdown will validate existence
+
+    if scheme not in ALLOWED_URL_SCHEMES:
+        sys.stderr.write(
+            f"[error] scheme {scheme!r}: is not allowed.\n{BLOCKED_SCHEMES_HINT}\n",
+        )
+        sys.exit(2)
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Convert any file (or URL) to Markdown via Microsoft markitdown.",
     )
     p.add_argument(
         "source",
-        help="File path or URL (http(s)://, file://, data:, YouTube URL).",
+        help="File path or http(s):// URL (incl. YouTube). file://, data:, ftp://, etc. are rejected.",
     )
     p.add_argument(
         "-o", "--output",
@@ -59,13 +96,21 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--azure-doc-intel",
-        default=os.environ.get("AZURE_DOC_INTEL_ENDPOINT"),
-        help="Azure Document Intelligence endpoint for high-fidelity PDF OCR.",
+        default=None,
+        help=(
+            "Azure Document Intelligence endpoint URL for high-fidelity PDF OCR. "
+            "Must be passed explicitly — the AZURE_DOC_INTEL_ENDPOINT env var "
+            "is intentionally NOT auto-read so an agent harness can't silently "
+            "ship private documents to a cloud OCR service."
+        ),
     )
     p.add_argument(
         "--enable-plugins",
         action="store_true",
-        help="Enable third-party markitdown plugins.",
+        help=(
+            "Enable third-party markitdown plugins. WARNING: plugins are arbitrary "
+            "Python code; only enable if you have explicitly installed plugins you trust."
+        ),
     )
     p.add_argument(
         "--quiet",
@@ -79,6 +124,12 @@ def build_converter(args: argparse.Namespace):
     from markitdown import MarkItDown
 
     kwargs = {"enable_plugins": args.enable_plugins}
+
+    if args.enable_plugins and not args.quiet:
+        sys.stderr.write(
+            "[warn] --enable-plugins is on. Third-party markitdown plugins run as "
+            "arbitrary Python code; ensure you trust every installed plugin.\n",
+        )
 
     if args.llm_describe:
         try:
@@ -108,7 +159,7 @@ def resolve_output_path(source: str, output: str | None) -> Path | None:
     if output:
         return Path(output)
     # Default: <source-stem>.md in CWD
-    if source.startswith(("http://", "https://", "data:", "file://")):
+    if source.startswith(("http://", "https://")):
         # URL → use a generic name
         return Path("converted.md")
     return Path(Path(source).stem + ".md")
@@ -132,6 +183,7 @@ def warn_known_pitfalls(source: str, content: str, quiet: bool) -> None:
 def main() -> int:
     ensure_markitdown()
     args = parse_args()
+    validate_source(args.source)
 
     converter = build_converter(args)
 

@@ -124,6 +124,96 @@ $body$
       });
     }
 
+    function stripAttackerStyles(root) {
+      // Remove ALL attacker-controlled inline style attributes BEFORE
+      // inlineStyles runs. Reason: CSS can hide dangerous schemes inside
+      // `url(...)` via comments (`ja/**/vascript:`), hex escapes
+      // (`javas\63ript:`), control whitespace, or `expression()`. Regex-based
+      // scrubbing is fragile against obfuscation. The reliable defense is to
+      // discard the attacker's bytes entirely and let inlineStyles write
+      // browser-normalized computed values that downstream editors can trust.
+      var all = root.querySelectorAll('*');
+      for (var i = 0; i < all.length; i++) {
+        all[i].removeAttribute('style');
+      }
+    }
+
+    function sanitizeClipboardClone(root) {
+      // Strip elements and attributes that could carry executable payload into
+      // whatever editor the user pastes into. Reason: if the source markdown
+      // contains raw HTML (markdown allows it), an attacker-authored doc could
+      // otherwise hand-deliver XSS via clipboard to a less-strict downstream
+      // editor (some rich-text editors preserve <script>, srcset, style, etc.).
+      var DROP_TAGS = [
+        'script', 'iframe', 'object', 'embed',
+        'link', 'meta', 'style', 'base',
+        'form', 'svg', 'math'  // svg/math can host <script>; form bridges formaction
+      ];
+      DROP_TAGS.forEach(function (tag) {
+        root.querySelectorAll(tag).forEach(function (el) { el.remove(); });
+      });
+
+      var URL_ATTRS = [
+        'href', 'src', 'xlink:href', 'srcset',
+        'poster', 'action', 'formaction',
+        'background', 'cite', 'data', 'longdesc', 'manifest', 'ping', 'usemap'
+      ];
+
+      function normalizeUrl(v) {
+        // Strip ASCII control chars (including \0, \t, \n, \r, etc.) before
+        // scheme check. Browsers and many URL parsers normalize these away
+        // when resolving, so `java\nscript:` reads as `javascript:` after
+        // parsing — but our naive substring check would miss the raw form.
+        return v.replace(/[\x00-\x1F\x7F]/g, '').trim().toLowerCase();
+      }
+
+      function isDangerousUrl(v) {
+        if (!v) return false;
+        var lower = normalizeUrl(v);
+        if (lower.indexOf('javascript:') === 0) return true;
+        if (lower.indexOf('vbscript:') === 0) return true;
+        // Allow data:image/png|jpeg|gif|webp|... but reject data:image/svg+xml
+        // (SVG can carry <script>) and any other data: type.
+        if (lower.indexOf('data:') === 0) {
+          if (lower.indexOf('data:image/svg') === 0) return true;
+          if (lower.indexOf('data:image/') !== 0) return true;
+        }
+        return false;
+      }
+
+      root.querySelectorAll('*').forEach(function (el) {
+        // Strip event handler attributes (onclick / onerror / onload / ...)
+        var attrs = el.attributes;
+        for (var i = attrs.length - 1; i >= 0; i--) {
+          var name = attrs[i].name.toLowerCase();
+          if (name.indexOf('on') === 0) {
+            el.removeAttribute(attrs[i].name);
+          }
+        }
+        // Scrub URL-bearing attributes
+        URL_ATTRS.forEach(function (attr) {
+          var v = el.getAttribute(attr);
+          if (v && isDangerousUrl(v)) {
+            el.removeAttribute(attr);
+          }
+          // srcset is a comma-separated list of URLs — if any candidate is
+          // dangerous, drop the whole attribute (safer than partial parsing).
+          if (attr === 'srcset' && v) {
+            var candidates = v.split(',');
+            for (var j = 0; j < candidates.length; j++) {
+              var first = candidates[j].trim().split(/\s+/)[0];
+              if (isDangerousUrl(first)) {
+                el.removeAttribute(attr);
+                break;
+              }
+            }
+          }
+        });
+        // style attribute is already pre-scrubbed by stripAttackerStyles()
+        // running before inlineStyles().
+      });
+    }
+
     function buildClipboardHtml() {
       // Clone the article to avoid mutating the live page
       var clone = article.cloneNode(true);
@@ -135,8 +225,14 @@ $body$
       hidden.appendChild(clone);
       document.body.appendChild(hidden);
 
-      // Apply inline styles
+      // Discard attacker-controlled inline styles BEFORE computing safe ones.
+      stripAttackerStyles(clone);
+
+      // Apply inline styles (computed by the browser — values are normalized).
       inlineStyles(clone);
+
+      // Sanitize tags and URL attributes (style is no longer attacker-controlled).
+      sanitizeClipboardClone(clone);
 
       // Now read the HTML back; we no longer need the hidden node
       var html = clone.outerHTML;

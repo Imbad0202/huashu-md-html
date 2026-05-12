@@ -163,8 +163,33 @@ def should_emit_toc(args: argparse.Namespace) -> bool:
     return args.theme == "interactive"
 
 
+def _within_base(candidate: Path, base_dir: Path) -> bool:
+    """Confirm a resolved path lives inside base_dir.
+
+    Used as a sandbox check before embedding or copying any file referenced
+    by markdown. When an LLM agent renders untrusted markdown that escapes
+    into HTML (e.g., a markdown saying `![](/etc/shadow)` or raw HTML
+    `<img src="../../private/key">`), the agent's `--inline-images` would
+    otherwise base64-embed those bytes and publish them to whoever reads
+    the output. The fix: refuse anything not under the source markdown's
+    own directory.
+    """
+    try:
+        base_resolved = base_dir.resolve()
+    except (OSError, RuntimeError):
+        return False
+    try:
+        candidate.relative_to(base_resolved)
+        return True
+    except ValueError:
+        return False
+
+
 def collect_local_images(md_text: str, base_dir: Path) -> list[Path]:
-    """Find referenced local images in markdown that exist on disk."""
+    """Find referenced local images in markdown that exist on disk.
+
+    Refuses any path that resolves outside base_dir. See `_within_base`.
+    """
     pattern = re.compile(r'!\[[^\]]*\]\(([^)\s"]+)')
     found: list[Path] = []
     for m in pattern.finditer(md_text):
@@ -172,13 +197,18 @@ def collect_local_images(md_text: str, base_dir: Path) -> list[Path]:
         if ref.startswith(("http://", "https://", "data:")):
             continue
         candidate = (base_dir / ref).resolve()
+        if not _within_base(candidate, base_dir):
+            continue
         if candidate.exists() and candidate.is_file():
             found.append(candidate)
     return found
 
 
 def inline_images_in_html(html: str, base_dir: Path) -> str:
-    """Replace local img src references with base64 data URIs."""
+    """Replace local img src references with base64 data URIs.
+
+    Refuses any src that resolves outside base_dir. See `_within_base`.
+    """
     pattern = re.compile(r'(<img[^>]+src=)"([^"]+)"')
 
     def replace(match: re.Match[str]) -> str:
@@ -186,6 +216,8 @@ def inline_images_in_html(html: str, base_dir: Path) -> str:
         if src.startswith(("http://", "https://", "data:")):
             return match.group(0)
         candidate = (base_dir / src).resolve()
+        if not _within_base(candidate, base_dir):
+            return match.group(0)
         if not candidate.exists():
             return match.group(0)
         mime, _ = mimetypes.guess_type(candidate)
@@ -198,8 +230,18 @@ def inline_images_in_html(html: str, base_dir: Path) -> str:
 
 
 def copy_images_alongside(images: list[Path], src_base: Path, out_dir: Path, quiet: bool) -> None:
+    """Copy referenced images next to the output html.
+
+    Refuses to copy any path that doesn't resolve under src_base.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     for img in images:
+        if not _within_base(img.resolve(), src_base):
+            if not quiet:
+                sys.stderr.write(
+                    f"[skip] refusing to copy out-of-base image: {img}\n",
+                )
+            continue
         try:
             relative = img.relative_to(src_base)
         except ValueError:

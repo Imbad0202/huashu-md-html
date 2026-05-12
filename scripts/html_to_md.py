@@ -87,6 +87,16 @@ def parse_args() -> argparse.Namespace:
         help="User-Agent for URL fetches.",
     )
     p.add_argument(
+        "--block-private-ip",
+        action="store_true",
+        help=(
+            "Refuse to fetch URLs that resolve to loopback / RFC1918 / "
+            "link-local addresses. Use this in hosted or multi-tenant agent "
+            "harnesses where SSRF to internal services is a concern. "
+            "Default: off (so intranet archival keeps working)."
+        ),
+    )
+    p.add_argument(
         "--quiet",
         action="store_true",
         help="Suppress non-error stderr output.",
@@ -94,11 +104,76 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def fetch_url(url: str, ua: str) -> str:
+MAX_RESPONSE_BYTES = 50 * 1024 * 1024  # 50 MB hard cap for fetched HTML
+
+
+def _resolves_to_private_ip(url: str) -> bool:
+    """Return True if hostname resolves to a loopback / RFC1918 / link-local IP.
+
+    Used by `fetch_url` only when --block-private-ip is set. We resolve via
+    getaddrinfo so DNS-rebinding-style "127.0.0.1.malicious.tld" gets caught.
+    """
+    import ipaddress
+    import socket
+    from urllib.parse import urlsplit
+
+    host = urlsplit(url).hostname
+    if not host:
+        return False
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except OSError:
+        return False
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            continue
+        if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved:
+            return True
+    return False
+
+
+def fetch_url(url: str, ua: str, block_private_ip: bool = False) -> str:
+    """Fetch a URL with a size cap and a strict final-scheme check.
+
+    Why: when an agent harness auto-feeds URLs into this script, an
+    attacker-controlled URL can serve a multi-gigabyte body to exhaust
+    memory, or use redirects to escape http(s). The size cap and final-URL
+    scheme check make those cheap to defend.
+
+    SSRF note: by default this function does NOT block loopback / RFC1918
+    / link-local IPs. Reason: a primary use case is archiving internal
+    documents (institutional intranet, localhost dev servers). For hosted
+    or multi-tenant agent harnesses where SSRF to internal services would
+    be harmful, pass `block_private_ip=True` (set via --block-private-ip).
+    """
+    if block_private_ip and _resolves_to_private_ip(url):
+        raise ValueError(
+            f"refused: {url!r} resolves to a private/loopback/link-local IP "
+            "and --block-private-ip is set."
+        )
     import urllib.request
     req = urllib.request.Request(url, headers={"User-Agent": ua})
     with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 — explicit user input
-        raw = resp.read()
+        # urllib follows http(s)→http(s) redirects by default and will refuse
+        # cross-scheme redirects, but check defensively anyway.
+        final_url = resp.geturl()
+        if not final_url.lower().startswith(("http://", "https://")):
+            raise ValueError(
+                f"refused: final URL after redirects is not http(s): {final_url!r}"
+            )
+        if block_private_ip and _resolves_to_private_ip(final_url):
+            raise ValueError(
+                f"refused: redirect target {final_url!r} resolves to a "
+                "private/loopback/link-local IP."
+            )
+        raw = resp.read(MAX_RESPONSE_BYTES + 1)
+        if len(raw) > MAX_RESPONSE_BYTES:
+            raise ValueError(
+                f"response exceeds size cap of {MAX_RESPONSE_BYTES} bytes; "
+                f"set MAX_RESPONSE_BYTES higher if you need larger pages."
+            )
         # Best-effort decode using charset hint or utf-8
         charset = resp.headers.get_content_charset() or "utf-8"
         return raw.decode(charset, errors="replace")
@@ -164,7 +239,7 @@ def main() -> int:
     # Load HTML
     if is_url(args.source):
         ensure_pkgs("trafilatura") if not args.no_extract else None
-        html = fetch_url(args.source, args.user_agent)
+        html = fetch_url(args.source, args.user_agent, block_private_ip=args.block_private_ip)
     else:
         path = Path(args.source)
         if not path.exists():

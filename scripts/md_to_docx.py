@@ -285,6 +285,59 @@ def extract_image_refs(md_text):
     return refs
 
 
+def _within_any(candidate, allowed_bases):
+    """Confirm candidate resolves inside at least one allowed base directory."""
+    try:
+        cand_resolved = candidate.resolve()
+    except (OSError, RuntimeError):
+        return False
+    for base in allowed_bases:
+        if base is None:
+            continue
+        try:
+            base_resolved = base.resolve()
+        except (OSError, RuntimeError):
+            continue
+        try:
+            cand_resolved.relative_to(base_resolved)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def resolve_image_path(path_str, md_dir, images_dir):
+    """Resolve a markdown image reference to an existing local file path,
+    or None if no safe candidate is found.
+
+    Sandbox: only paths that resolve under `md_dir` or the user-specified
+    `images_dir` are accepted. Anything else (absolute paths to /etc, parent
+    traversal, etc.) is rejected so an untrusted markdown can't induce the
+    docx renderer to embed sensitive local files.
+    """
+    md_dir = Path(md_dir)
+    images_base = Path(images_dir) if images_dir else None
+    allowed = (md_dir, images_base)
+
+    cand = Path(path_str)
+    if not cand.is_absolute():
+        cand = md_dir / path_str
+
+    if _within_any(cand, allowed) and cand.exists():
+        return str(cand)
+
+    if images_base is not None:
+        # Fallback: try `images_dir / basename(path_str)`. Strip directory
+        # components from the user-supplied path to force the lookup into
+        # images_dir; this keeps the convenience of "bare filename → images
+        # dir" while preventing `../escape` from leaving images_dir.
+        cand2 = images_base / Path(path_str).name
+        if _within_any(cand2, (images_base,)) and cand2.exists():
+            return str(cand2)
+
+    return None
+
+
 # ============================================================
 # docx 渲染
 # ============================================================
@@ -709,40 +762,29 @@ def build_docx(md_files, output, images_dir=None, book_mode=False,
         chapter_label = (chapter_labels[idx] if chapter_labels
                          and idx < len(chapter_labels) else None)
 
-        # 图片解析器
+        # 图片解析器（呼叫 resolve_image_path，加入 base_dir 沙箱）
         def make_resolver(md_p, refs):
             md_dir = md_p.parent
 
             def resolve(block):
                 if block.get("via") == "inline":
-                    p = block["path"]
-                    cand = Path(p)
-                    if not cand.is_absolute():
-                        cand = md_dir / p
-                    if not cand.exists() and images_dir:
-                        cand = Path(images_dir) / Path(p).name
-                    return str(cand) if cand.exists() else None
-                else:
-                    # 引用式：ref 映射到文件名或路径
-                    ref = block.get("ref", "")
-                    path_str = refs.get(ref)
-                    if path_str:
-                        cand = Path(path_str)
-                        if not cand.is_absolute():
-                            cand = md_dir / path_str
-                        if not cand.exists() and images_dir:
-                            cand = Path(images_dir) / Path(path_str).name
-                        return str(cand) if cand.exists() else None
-                    # 退化：直接按 ref 名字到 images_dir 找
-                    if images_dir:
-                        # 匹配 fig-1-1 → ch01-fig01.png
-                        m = re.match(r"fig-(\d+)-(\d+)", ref)
-                        if m:
-                            ch_, fig_ = int(m.group(1)), int(m.group(2))
-                            cand = Path(images_dir) / f"ch{ch_:02d}-fig{fig_:02d}.png"
-                            if cand.exists():
-                                return str(cand)
-                    return None
+                    return resolve_image_path(block["path"], md_dir, images_dir)
+                # 引用式：ref 映射到文件名或路径
+                ref = block.get("ref", "")
+                path_str = refs.get(ref)
+                if path_str:
+                    return resolve_image_path(path_str, md_dir, images_dir)
+                # 退化：直接按 ref 名字到 images_dir 找
+                if images_dir:
+                    m = re.match(r"fig-(\d+)-(\d+)", ref)
+                    if m:
+                        ch_, fig_ = int(m.group(1)), int(m.group(2))
+                        return resolve_image_path(
+                            f"ch{ch_:02d}-fig{fig_:02d}.png",
+                            md_dir,
+                            images_dir,
+                        )
+                return None
             return resolve
 
         resolver = make_resolver(md_path, image_refs)
