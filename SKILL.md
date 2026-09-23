@@ -7,19 +7,19 @@ description: 花叔的多格式导入 / 出版型流水线 skill。三类独有�
 
 > 你不再需要亲手编辑产物。md 是源代码，html / docx 是产物。这个 skill 把多端的最优解打通成一条流水线。
 
-## 路由前置檢查（命中即退出）
+## 路由前置檢查
 
-在跑本 skill 任何腳本前，先做這個檢查——若命中**任一條退出規則**，立刻停手，請使用者改用對應的 skill：
+在跑本 skill 任何腳本前，先做這個檢查。命中**任一條退出規則**時，若環境中有對應的替代 skill，立刻停手，請使用者改用它；若沒有，改看下面的正向 routing 表，本 skill 不支援的需求要跟使用者說明：
 
-**退出規則 1**：任務是一般 markdown → docx/Word 排版，**且使用者沒明說「出版社送審 / 紙質書 / 投稿 / book mode / 整本書 / 封面目錄頁眉頁腳」**。→ 改用 make-docx。
+**退出規則 1**：任務是一般 markdown → docx/Word 排版，**且使用者沒明說「出版社送審 / 紙質書 / 投稿 / book mode / 整本書 / 封面目錄頁眉頁腳」**。→ 對應的替代 skill：通用的 docx 排版 skill。
 
-**退出規則 2a**：任務提到「sprout 觀察表 / 訪視觀察表 / 深耕觀察表 / 深耕分析報告 / sprout 分析報告」，或 md 內容是評鑑/訪視觀察表性質的固定欄位表單。→ 改用 sprout-observation。
+**退出規則 2a**：任務是評鑑用的固定欄位觀察表，或這類觀察表的分析報告。→ 對應的替代 skill：專門產觀察表的 skill。
 
-**退出規則 2b**：任務提到 PACUCOA dd-report 或 HEEACT 日常給主管 review 的非訪視文件，且要 docx 交付。→ 改用 make-docx 的 `report-portrait` 或 `brief-portrait` preset。
+**退出規則 2b**：任務是機構內部給主管審閱的一般報告（非出版品），且要 docx 交付。→ 對應的替代 skill：通用的 docx 排版 skill（選合適的報告版型）。
 
-**退出規則 3**：檔名包含 `_觀察表_` 或 `_分析報告_` 且明確是 sprout/HEEACT 評鑑 context（路徑包含 `sprout` / `深耕` / `訪視` 任一字串、或同目錄有 `question_pool.json`）。→ 改用 sprout-observation。**注意**：若是「競品_分析報告_2026.md」這類通用標題且要轉 html，huashu 能力 2 仍可處理，這條不適用。
+**退出規則 3**：檔名包含 `_觀察表_` 或 `_分析報告_`，且上下文明確是評鑑用觀察表。→ 同退出規則 2a。**注意**：若是「競品_分析報告_2026.md」這類通用標題且要轉 html，huashu 能力 2 仍可處理，這條不適用。
 
-退出規則都不命中，再看下面這張正向 routing 表決定能力 1/2/3/4 哪個：
+退出規則都不命中，或命中了但環境中沒有對應的替代 skill，再看下面這張正向 routing 表決定能力 1/2/3/4 哪個：
 
 | 用戶說 | 走哪個能力 |
 |---|---|
@@ -28,7 +28,7 @@ description: 花叔的多格式导入 / 出版型流水线 skill。三类独有�
 | 「html 轉 md」「博客 URL 抓回來歸檔」 | **能力 3**（trafilatura + html-to-markdown） |
 | 「整本書 md → 出版社審校 docx」「投稿用 word」「紙質書定稿」「book mode」 | **能力 4**（python-docx 出版社級） |
 
-若任務模糊（譬如「把這份 md 出個 docx」沒講場景），AskUserQuestion 確認：是 (A) book mode 整書，還是 (B) 一般文件給主管 review？如果是 (B) 就交給 make-docx。不要兩個 skill 都跑造成重複 docx。
+若任務模糊（譬如「把這份 md 出個 docx」沒講場景），AskUserQuestion 確認：是 (A) book mode 整書，還是 (B) 一般文件給主管 review？如果是 (B) 就交給通用的 docx 排版 skill（環境中有的話）。不要兩個 skill 都跑造成重複 docx。
 
 ## 四个能力（决策树）
 
@@ -219,11 +219,11 @@ python scripts/html_to_md.py input.html -o output.md
 
 ## 能力4：md → 出版型 docx（`scripts/md_to_docx.py`）
 
-封装 [python-docx](https://github.com/python-openxml/python-docx) + 出版社级排版预设。**只用于「整本书 / book mode / 出版社送审 / 纸质书定稿 / 投稿稿」场景**，不用于一般 markdown 转 docx 排版（那是 make-docx 的领地）。
+封装 [python-docx](https://github.com/python-openxml/python-docx) + 出版社级排版预设。**只用于「整本书 / book mode / 出版社送审 / 纸质书定稿 / 投稿稿」场景**，不用于一般 markdown 转 docx 排版（那是通用 docx 排版 skill 的领地）。
 
 **為什麼獨立做能力4**：pandoc 自帶 `md → docx` 出來的版式很「生硬」（預設 Calibri、表格無樣式、章節首頁無設計）。出版社/紙質書版式有自己的語言——章號小標 + 大字號章名 + 英文副標題 + 橙色分隔線、引用塊按類型配色、表格表頭底色、頁眉書名 + 頁腳自動頁碼。能力4 把這些都內置了。
 
-**進入能力 4 的判斷**：使用者明確說「整本書」「book mode」「出版社送審」「紙質書定稿」「投稿稿」「封面 + 目錄 + 頁眉頁腳」其中之一才用，否則去 make-docx。
+**進入能力 4 的判斷**：使用者明確說「整本書」「book mode」「出版社送審」「紙質書定稿」「投稿稿」「封面 + 目錄 + 頁眉頁腳」其中之一才用，否則交給通用的 docx 排版 skill（環境中有的話）。
 
 ### 调用
 
